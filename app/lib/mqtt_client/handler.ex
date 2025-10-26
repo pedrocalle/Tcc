@@ -18,13 +18,16 @@ defmodule MqttClient.Handler do
     case Jason.decode(payload) do
       {:ok,
        %{
-         "temp" => temp,
+         "temperatura" => temperatura,
          "umidade_ar" => umidade_ar,
          "umidade_solo" => umidade_solo,
-         "luminosidade" => luminosidade
+         "luminosidade" => luminosidade,
+         "status_bomba" => status_bomba,
+         "status_luz" => status_luz,
+         "data_hora" => data_hora
        }} ->
         Logger.info(
-          "Valores -> Temp: #{temp}, Umidade Ar: #{umidade_ar}, Umidade Solo: #{umidade_solo}, Luminosidade: #{luminosidade}"
+          "Valores -> Temp: #{temperatura}, Umidade Ar: #{umidade_ar}, Umidade Solo: #{umidade_solo}, Luminosidade: #{luminosidade}, Status da luz: #{status_luz}, Status da bomba: #{status_bomba}, Data e Hora: #{data_hora}"
         )
 
       _ ->
