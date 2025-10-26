@@ -1,0 +1,9 @@
+## Número de schedulers: limitar para não usar todos os núcleos
++s 2:2
+
+## Configurações de memória ETS e Ports
+-env ERL_MAX_ETS_TABLES 256
+-env ERL_MAX_PORTS 1024
+
+## Configurações de garbage collector
+-env ERL_FULLSWEEP_AFTER 10

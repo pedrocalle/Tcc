@@ -7,7 +7,18 @@ defmodule TccApp.MixProject do
       version: "0.1.0",
       elixir: "~> 1.17.2",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      releases: releases()
+    ]
+  end
+
+  defp releases do
+    [
+      app: [
+        version: "0.1.0",
+        applications: [runtime_tools: :permanent],
+        vm_args: "config/vm.args"
+      ]
     ]
   end
 
