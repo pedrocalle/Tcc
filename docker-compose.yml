@@ -3,7 +3,7 @@ version: "3.9"
 services:
   app:
     build:
-      context: ./estufa_app
+      context: ./app
       dockerfile: Dockerfile
     container_name: estufa_app
     environment:
@@ -15,19 +15,23 @@ services:
     ports:
       - "4000:4000"
     volumes:
-      - ./estufa_app:/app
-    command: mix phx.server
+      - ./app:/app
+    working_dir: /app
+    command: >
+      sh -c "mix deps.get &&
+             mix compile &&
+             mix run --no-halt"
     networks:
       - tcc_net
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2.0
     container_name: mosquitto
     restart: always
     ports:
       - "1883:1883"
     volumes:
-      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
     networks:
       - tcc_net

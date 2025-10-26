@@ -9,7 +9,7 @@ defmodule MqttClient do
   end
 
   def init(_) do
-    host = System.get_env("MQTT_HOST", "localhost")
+    host = System.get_env("MQTT_HOST", "mosquitto")
     port = String.to_integer(System.get_env("MQTT_PORT", "1883"))
 
     Logger.info("Conectando ao broker MQTT em #{host}:#{port}")
@@ -25,8 +25,25 @@ defmodule MqttClient do
     {:ok, %{}}
   end
 
-  def publish(temp, umidade) do
-    payload = Jason.encode!(%{temp: temp, umidade: umidade})
-    Tortoise311.publish("tcc_app_client", @topic, payload, qos: 0)
+  # Publicar todas as 4 variáveis
+  def publish(temp, umidade_ar, umidade_solo, luminosidade) do
+    payload =
+      %{
+        temp: temp,
+        umidade_ar: umidade_ar,
+        umidade_solo: umidade_solo,
+        luminosidade: luminosidade
+      }
+      |> Jason.encode!()
+
+    case Tortoise311.publish("tcc_app_client", @topic, payload, qos: 0) do
+      :ok ->
+        Logger.info("Mensagem publicada: #{payload}")
+        :ok
+
+      {:error, reason} ->
+        Logger.error("Erro ao publicar mensagem: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 end
