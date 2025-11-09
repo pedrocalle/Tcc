@@ -34,7 +34,8 @@ defmodule TccApp.MixProject do
   defp deps do
     [
       {:tortoise311, "~> 0.11"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:httpoison, "~> 2.0"}
     ]
   end
 end
