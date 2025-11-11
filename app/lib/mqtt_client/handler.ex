@@ -2,6 +2,8 @@ defmodule MqttClient.Handler do
   @behaviour Tortoise311.Handler
   require Logger
 
+  @backend_url "https://miniestufa-backend.onrender.com"
+
   @impl true
   def init(_opts) do
     Logger.info("🔌 Handler MQTT iniciado")
@@ -21,7 +23,6 @@ defmodule MqttClient.Handler do
   end
 
   @impl true
-  @impl true
   def handle_message(topic, payload, state) do
     Logger.info("💬 Mensagem recebida no tópico #{topic}: #{payload}")
 
@@ -29,32 +30,48 @@ defmodule MqttClient.Handler do
       {:ok, dados} ->
         Logger.info("""
         🌡️ Dados recebidos:
+          Tipo: #{dados["tipo"]}
           Temperatura: #{dados["temperatura"]}
           Umidade do Ar: #{dados["umidade_ar"]}
           Umidade do Solo: #{dados["umidade_solo"]}
           Luminosidade: #{dados["luminosidade"]}
-          Umidade Solo Bruto: #{dados["umidade_solo_bruto"]}
+          Solo (bruto): #{dados["solo_bruto"]}
           Status Bomba: #{dados["status_bomba"]}
+          Status Luz: #{dados["status_luz"]}
           Data/Hora: #{dados["data_hora"]}
         """)
 
-        Task.start(fn ->
-          body =
-            %{
-              "data_hora" => dados["data_hora"],
-              "temperatura" => dados["temperatura"],
-              "umidade_ar" => dados["umidade_ar"],
-              "luminosidade" => dados["luminosidade"],
-              "umidade_solo" => dados["umidade_solo"],
-              "umidade_solo_bruto" => round(dados["umidade_solo_bruto"]),
-              "status_bomba" => to_string(dados["status_bomba"])
-            }
-            |> Jason.encode!()
+        Task.start(fn -> forward_to_backend(dados, payload) end)
 
+      {:error, reason} ->
+        Logger.warn("⚠️ Falha ao decodificar JSON: #{inspect(reason)} | payload=#{payload}")
+    end
+
+    {:ok, state}
+  end
+
+  defp forward_to_backend(dados, raw_payload) do
+    body_map =
+      dados
+      |> Map.take([
+        "tipo",
+        "data_hora",
+        "temperatura",
+        "umidade_ar",
+        "luminosidade",
+        "umidade_solo",
+        "solo_bruto",
+        "status_bomba",
+        "status_luz"
+      ])
+      |> Map.reject(fn {_, v} -> is_nil(v) end)
+
+    case Jason.encode(body_map) do
+      {:ok, body} ->
           Logger.info("🚀 Enviando JSON: #{body}")
 
           case HTTPoison.post(
-                 "https://miniestufa-backend.onrender.com/api/sensor/push",
+               "#{@backend_url}/api/sensor/push",
                  body,
                  [{"Content-Type", "application/json"}]
                ) do
@@ -62,18 +79,15 @@ defmodule MqttClient.Handler do
               Logger.info("✅ Dados enviados com sucesso para o backend")
 
             {:ok, %HTTPoison.Response{status_code: code, body: resp_body}} ->
-              Logger.warn("⚠️ Falha ao enviar (#{code}): #{inspect(resp_body)}")
+            Logger.warn("⚠️ Falha ao enviar (#{code}): #{inspect(resp_body)} | payload=#{body}")
 
             {:error, reason} ->
-              Logger.error("❌ Erro HTTP: #{inspect(reason)}")
+            Logger.error("❌ Erro HTTP: #{inspect(reason)} | body=#{body}")
           end
-        end)
 
       {:error, reason} ->
-        Logger.warn("⚠️ Falha ao decodificar JSON: #{inspect(reason)}")
+        Logger.error("❌ Não foi possível serializar JSON: #{inspect(reason)} | dados=#{inspect(body_map)} | payload=#{raw_payload}")
     end
-
-    {:ok, state}
   end
 
   @impl true
