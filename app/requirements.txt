@@ -1,0 +1,8 @@
+numpy>=1.24
+pandas>=2.0
+scikit-learn>=1.2
+lightgbm>=3.3
+joblib
+paho-mqtt
+PyYAML
+python-dotenv

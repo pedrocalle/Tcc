@@ -2,97 +2,88 @@ defmodule MqttClient.Handler do
   @behaviour Tortoise311.Handler
   require Logger
 
-  @backend_url "https://miniestufa-backend.onrender.com"
-
   @impl true
-  def init(_opts) do
-    Logger.info("🔌 Handler MQTT iniciado")
-    {:ok, %{}}
-  end
+  def init(_opts), do: {:ok, %{}}
 
   @impl true
   def connection(status, state) do
-    Logger.info("📡 Conexão MQTT mudou de status: #{inspect(status)}")
+    Logger.info("🔌 Conexão MQTT mudou de status: #{inspect(status)}")
     {:ok, state}
   end
 
   @impl true
   def subscription(status, topic_filter, state) do
-    Logger.info("📬 Subscrição #{inspect(topic_filter)} mudou para: #{inspect(status)}")
+    Logger.info("📡 Subscrição #{inspect(topic_filter)} mudou para: #{inspect(status)}")
     {:ok, state}
   end
 
   @impl true
   def handle_message(topic, payload, state) do
-    Logger.info("💬 Mensagem recebida no tópico #{topic}: #{payload}")
+    Logger.info("📩 Mensagem recebida no tópico #{topic}: #{payload}")
 
     case Jason.decode(payload) do
       {:ok, dados} ->
-        Logger.info("""
-        🌡️ Dados recebidos:
-          Tipo: #{dados["tipo"]}
-          Temperatura: #{dados["temperatura"]}
-          Umidade do Ar: #{dados["umidade_ar"]}
-          Umidade do Solo: #{dados["umidade_solo"]}
-          Luminosidade: #{dados["luminosidade"]}
-          Solo (bruto): #{dados["solo_bruto"]}
-          Status Bomba: #{dados["status_bomba"]}
-          Status Luz: #{dados["status_luz"]}
-          Data/Hora: #{dados["data_hora"]}
-        """)
+        # Salva os dados recebidos para o script Python
+        temp_json = "/tmp/dados_sensor.json"
+        File.write!(temp_json, Jason.encode!(dados, pretty: true))
 
-        Task.start(fn -> forward_to_backend(dados, payload) end)
+        Logger.info("🤖 Executando modelo IA (scripts/predict.py)...")
 
-      {:error, reason} ->
-        Logger.warn("⚠️ Falha ao decodificar JSON: #{inspect(reason)} | payload=#{payload}")
-    end
+        script_path = Path.expand("script/predict.py", File.cwd!())
 
-    {:ok, state}
-  end
+        {output, exit_code} =
+          System.cmd("python3", [script_path, temp_json], stderr_to_stdout: true)
 
-  defp forward_to_backend(dados, raw_payload) do
-    body_map =
-      dados
-      |> Map.take([
-        "tipo",
-        "data_hora",
-        "temperatura",
-        "umidade_ar",
-        "luminosidade",
-        "umidade_solo",
-        "solo_bruto",
-        "status_bomba",
-        "status_luz"
-      ])
-      |> Map.reject(fn {_, v} -> is_nil(v) end)
+        if exit_code == 0 do
+          Logger.info("✅ IA executada com sucesso")
+          Logger.debug("Saída do Python:\n#{output}")
+        else
+          Logger.error("❌ Erro ao executar IA:\n#{output}")
+        end
 
-    case Jason.encode(body_map) do
-      {:ok, body} ->
-          Logger.info("🚀 Enviando JSON: #{body}")
+        # Interpreta a saída da IA
+        ia_result = String.trim(output)
 
+        status_bomba =
+          case ia_result do
+            "LIGAR_BOMBA" -> "Bomba ativada"
+            "DESLIGAR_BOMBA" -> "Bomba desativada"
+            _ -> "Indefinido"
+          end
+
+        # Adiciona o campo no JSON que será enviado
+        dados_atualizados = Map.put(dados, "status_bomba", status_bomba)
+
+        # Envia para o backend em uma Task assíncrona
+        Task.start(fn ->
           case HTTPoison.post(
-               "#{@backend_url}/api/sensor/push",
-                 body,
+                 "https://miniestufa-backend.onrender.com/api/sensor/push",
+                 Jason.encode!(dados_atualizados),
                  [{"Content-Type", "application/json"}]
                ) do
             {:ok, %HTTPoison.Response{status_code: 200}} ->
               Logger.info("✅ Dados enviados com sucesso para o backend")
 
-            {:ok, %HTTPoison.Response{status_code: code, body: resp_body}} ->
-            Logger.warn("⚠️ Falha ao enviar (#{code}): #{inspect(resp_body)} | payload=#{body}")
+            {:ok, %HTTPoison.Response{status_code: code, body: body}} ->
+              Logger.warn("⚠️ Falha ao enviar (#{code}): #{body}")
 
             {:error, reason} ->
-            Logger.error("❌ Erro HTTP: #{inspect(reason)} | body=#{body}")
+              Logger.error("❌ Erro HTTP: #{inspect(reason)}")
           end
+        end)
+
+        Logger.info("🚀 JSON enviado com status_bomba: #{inspect(dados_atualizados)}")
 
       {:error, reason} ->
-        Logger.error("❌ Não foi possível serializar JSON: #{inspect(reason)} | dados=#{inspect(body_map)} | payload=#{raw_payload}")
+        Logger.error("⚠️ Erro ao decodificar JSON: #{inspect(reason)}")
     end
+
+    {:ok, state}
   end
 
   @impl true
   def terminate(reason, state) do
-    Logger.warn("🚨 Handler terminado: #{inspect(reason)}")
+    Logger.warn("💀 Handler terminado: #{inspect(reason)}")
     {:ok, state}
   end
 end
