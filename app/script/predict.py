@@ -18,8 +18,8 @@ os.makedirs(historico_dir, exist_ok=True)
 historico_csv = os.path.join(historico_dir, "historico_estufa.csv")
 
 # Configuração MQTT
-BROKER = "test.mosquitto.org"   # <- IP da Raspberry
-TOPIC = "estufa/controle"       # <- tópico de publicação
+BROKER = os.getenv("MQTT_HOST", "mosquitto") 
+TOPIC = "estufa/controle"
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.connect(BROKER, 1883, 60)
 
